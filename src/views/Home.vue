@@ -3,6 +3,7 @@
     <div v-if="!loginState" class="login-wrapper">
       <el-card class="login-card">
         <div class="login-header">
+          <img src="https://play-lh.googleusercontent.com/M29pkEabzdIihXxY6d9N1i-hX1ZO8Trt2UTni65CG9NcOZaCTwEusFO3PEBWM4cWdcs=w240-h480-rw" alt="Smart Life Logo" class="login-logo">
           <h2>Welcome Home</h2>
           <p>Please sign in to control your devices.</p>
         </div>
@@ -25,288 +26,139 @@
         <div class="header-content">
           <div class="welcome-text">
             <h1>Your Devices</h1>
-            <p>{{ pinnedDevices.length + generalDevices.length }} devices connected</p>
+            <p>{{ sections.reduce((acc, s) => acc + s.devices.length, 0) }} devices connected</p>
           </div>
           <div class="header-actions">
             <!-- Weather Card -->
-            <div class="weather-card">
-               <div class="weather-info">
-                 <div class="date-time">
-                   <div class="time">{{ currentTime }}</div>
-                   <div class="date">{{ currentDate }}</div>
-                 </div>
-                 <div class="weather-detail" v-if="weatherData">
+            <div class="weather-pill">
+               <div class="weather-brief">
+                 <div class="vibrant-time">{{ currentTime }}</div>
+                 <div class="vibrant-date">{{ currentDate }}</div>
+               </div>
+               <div class="vibrant-weather" v-if="weatherData">
+                 <div class="weather-main">
                    <i :class="getWeatherIcon(weatherData.weather_code)"></i>
-                   <div class="weather-values">
-                      <span>{{ weatherData.temperature_2m }}°C</span>
-                      <span class="humidity"><i class="fa-solid fa-droplet"></i> {{ weatherData.relative_humidity_2m }}%</span>
-                   </div>
+                   <span class="vibrant-temp">{{ Math.round(weatherData.temperature_2m) }}°</span>
+                 </div>
+                 <div class="weather-meta">
+                    <span class="vibrant-humidity"><i class="fa-solid fa-droplet"></i> {{ weatherData.relative_humidity_2m }}%</span>
                  </div>
                </div>
             </div>
 
-            <el-button class="btn-secondary" @click="createVirtualDevice">
-              <i class="fa-solid fa-plus"></i>
-              <span>Add Custom Card</span>
+            <el-button class="btn-primary-sm" @click="addSection">
+              <i class="fa-solid fa-folder-plus"></i>
+              <span>Add Section</span>
             </el-button>
 
-            <el-button class="btn-secondary" @click="showHiddenDevices = !showHiddenDevices">
-              <i :class="['fa-solid', showHiddenDevices ? 'fa-eye-slash' : 'fa-eye']"></i>
-              <span>{{ showHiddenDevices ? 'Hide Hidden' : 'Show Hidden' }}</span>
+            <el-button class="btn-secondary-sm" @click="createVirtualDevice">
+              <i class="fa-solid fa-plus"></i>
+              <span>Add Card</span>
             </el-button>
-            
-            <el-button class="btn-secondary" @click="refreshDevices()">
-              <i class="fa-solid fa-rotate"></i>
-              <span>Refresh</span>
-            </el-button>
-            <el-button class="btn-logout" @click="logout()">
+
+            <el-button class="btn-logout-sm" @click="logout()">
               <i class="fa-solid fa-right-from-bracket"></i>
-              <span>Logout</span>
             </el-button>
           </div>
         </div>
       </header>
       
-      <div class="section-container">
-        <div class="section-header" @click="sectionConfig.custom.expanded = !sectionConfig.custom.expanded">
-          <div class="header-left">
-            <i class="fa-solid fa-chevron-right section-arrow" :class="{ 'expanded': sectionConfig.custom.expanded }"></i>
-            <div v-if="sectionConfig.custom.editing" class="title-edit" @click.stop>
-              <el-input 
-                v-model="sectionConfig.custom.title" 
-                size="small" 
-                @blur="sectionConfig.custom.editing = false"
-                @keyup.enter="sectionConfig.custom.editing = false"
-                ref="customTitleInput"
-              />
-            </div>
-            <h3 v-else class="section-title">{{ sectionConfig.custom.title }}</h3>
+      <el-tabs v-model="activeTab" class="dashboard-tabs">
+        <el-tab-pane label="Dashboard" name="dashboard">
+          <div class="tab-content">
+            <draggable 
+              v-model="sections" 
+              item-key="id" 
+              handle=".section-drag-handle"
+              ghost-class="ghost-section"
+              class="sections-wrapper"
+              @end="saveOrder"
+            >
+              <template #item="{ element: section }">
+                <div class="section-container">
+                  <div class="section-header" @mouseenter="section.hover = true" @mouseleave="section.hover = false">
+                    <div class="header-left" @click="section.expanded = !section.expanded">
+                      <i class="fa-solid fa-chevron-right section-arrow" :class="{ 'expanded': section.expanded }"></i>
+                      <div v-if="section.editing" class="title-edit" @click.stop>
+                        <el-input 
+                          v-model="section.title" 
+                          size="small" 
+                          @blur="section.editing = false"
+                          @keyup.enter="section.editing = false"
+                          :ref="el => { if (el) sectionRefs[section.id] = el }"
+                        />
+                      </div>
+                      <h3 v-else class="section-title">{{ section.title }}</h3>
+                    </div>
+                    
+                    <div class="header-actions-sm" v-show="section.hover || section.editing">
+                      <el-button link size="small" @click.stop="editSection(section)">
+                        <i class="fa-solid fa-pen"></i>
+                      </el-button>
+                      <el-button v-if="section.id !== 'default'" link size="small" @click.stop="deleteSection(section)">
+                        <i class="fa-solid fa-trash"></i>
+                      </el-button>
+                      <div class="section-drag-handle">
+                        <i class="fa-solid fa-grip-lines"></i>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-show="section.expanded">
+                    <div v-if="section.devices.length === 0" class="empty-state">
+                       <i class="fa-solid fa-box-open mb-2" style="font-size: 24px; opacity: 0.2"></i>
+                       <p>Drag devices here.</p>
+                    </div>
+                    <draggable 
+                      v-model="section.devices" 
+                      item-key="id" 
+                      handle=".drag-handle"
+                      ghost-class="ghost-card"
+                      group="devices"
+                      class="device-grid"
+                      @end="saveOrder"
+                    >
+                      <template #item="{ element: device }">
+                        <DeviceCard 
+                          v-if="!device.customHidden"
+                          :device="device"
+                          @edit="openEditDialog"
+                          @hide="quickHide"
+                          @delete="handleDelete"
+                          @toggle="toggleDevice"
+                          @trigger-scene="triggerScene"
+                        />
+                      </template>
+                    </draggable>
+                  </div>
+                </div>
+              </template>
+            </draggable>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="Hidden" name="hidden">
+        <div class="tab-content">
+          <div class="empty-state" v-if="hiddenDevices.length === 0">
+            <i class="fa-solid fa-eye-slash mb-2" style="font-size: 32px; opacity: 0.3"></i>
+            <p>No hidden devices.</p>
           </div>
-          <div class="header-actions-sm">
-             <el-button link size="small" @click.stop="startEditSection('custom')">
-               <i class="fa-solid fa-pen"></i>
-             </el-button>
+          <div class="device-grid" v-else>
+            <DeviceCard 
+              v-for="device in hiddenDevices"
+              :key="device.id"
+              :device="device"
+              :show-hidden="true"
+              @edit="openEditDialog"
+              @hide="toggleHide(device)"
+              @delete="handleDelete"
+              @toggle="toggleDevice"
+              @trigger-scene="triggerScene"
+            />
           </div>
         </div>
-
-        <draggable 
-          v-if="sectionConfig.custom.expanded"
-          v-model="pinnedDevices" 
-          item-key="id" 
-          handle=".drag-handle"
-          ghost-class="ghost-card"
-          group="devices"
-          class="device-grid"
-          @end="saveOrder"
-        >
-          <template #item="{ element: device }">
-            <el-card 
-              class="device" 
-              :class="{ 'offline': device.data.online === false }"
-              v-show="!device.customHidden || showHiddenDevices"
-            >
-              <div class="card-badges">
-                <div v-if="getTemperature(device) && !isSensor(device)" class="temp-badge">
-                  <i class="fa-solid fa-temperature-half"></i>
-                  <span>{{ getTemperature(device) }}°C</span>
-                </div>
-                <div class="edit-btn" @click="openEditDialog(device)">
-                  <i class="fa-solid fa-gear"></i>
-                </div>
-                <div class="hide-btn" @click.stop="quickHide(device)" title="Hide device">
-                  <i class="fa-solid fa-eye-slash"></i>
-                </div>
-                <div class="drag-handle">
-                  <i class="fa-solid fa-grip-vertical"></i>
-                </div>
-              </div>
-              <div class="device-inner">
-                <el-tooltip effect="light" :content="device.type" :offset="[-10, 0]" :visible-arrow="false">
-                  <div class="device-icon-wrapper">
-                    <div v-if="isFontIcon(device.customIcon || device.type)" class="device-icon-font">
-                      <i :class="getIconClass(device.customIcon || device.type)"></i>
-                    </div>
-                    <el-avatar v-else :src="getIconUrl(device)" shape="circle" class="device-avatar">
-                      <img src="device_icons/default.png"/>
-                    </el-avatar>
-                    <div v-if="device.data.online" class="online-indicator"></div>
-                  </div>
-                </el-tooltip>
-                
-                <div class="device-info">
-                  <span class="device-name">{{ device.customName || device.name }}</span>
-                  <span class="device-status">{{ device.data.online ? (device.data.state ? 'Active' : 'Standby') : 'Offline' }}</span>
-                </div>
-
-                <div class="device-control">
-                  <template v-if="device.type === 'scene'">
-                    <el-button circle size="large" class="trigger-btn" @click="triggerScene(device);">
-                      <i class="fa-solid fa-play"></i>
-                    </el-button>
-                  </template>
-
-                  <template v-else-if="device.customUi === 'door_lock' || device.customUi === 'ac_mode'">
-                    <div class="custom-ui-grid" :class="device.customUi">
-                      <el-button 
-                        v-for="(btn, idx) in device.customButtons" 
-                        :key="idx"
-                        size="small" 
-                        class="custom-btn"
-                        @click="triggerCustomScene(btn.sceneId)"
-                        :disabled="!btn.sceneId"
-                      >
-                        <div class="btn-content">
-                          <i v-if="btn.icon" :class="btn.icon"></i>
-                          <span>{{ btn.label || `Btn ${idx+1}` }}</span>
-                        </div>
-                      </el-button>
-                    </div>
-                  </template>
-
-                  <template v-else-if="isSensor(device)">
-                    <div class="sensor-display">
-                      <span class="sensor-value">{{ getTemperature(device) }}</span>
-                      <span class="sensor-unit">°C</span>
-                    </div>
-                  </template>
-                  <template v-else>
-                    <el-button circle size="large"
-                      :class="['toggle-btn', device.data.state ? 'state-on' : 'state-off']"
-                      :disabled="!device.data.online"
-                      @click="toggleDevice(device);"
-                    >
-                      <i :class="['fa-solid', device.data.online ? 'fa-power-off' : 'fa-cloud-slash']"></i>
-                    </el-button>
-                  </template>
-                </div class="device-control">
-              </div>
-            </el-card>
-          </template>
-        </draggable>
-      </div>
-
-      <div class="section-container">
-        <div class="section-header" @click="sectionConfig.all.expanded = !sectionConfig.all.expanded">
-          <div class="header-left">
-             <i class="fa-solid fa-chevron-right section-arrow" :class="{ 'expanded': sectionConfig.all.expanded }"></i>
-             <div v-if="sectionConfig.all.editing" class="title-edit" @click.stop>
-               <el-input 
-                 v-model="sectionConfig.all.title" 
-                 size="small" 
-                 @blur="sectionConfig.all.editing = false"
-                 @keyup.enter="sectionConfig.all.editing = false"
-                 ref="allTitleInput"
-               />
-             </div>
-             <h3 v-else class="section-title">{{ sectionConfig.all.title }}</h3>
-          </div>
-           <div class="header-actions-sm">
-             <el-button link size="small" @click.stop="startEditSection('all')">
-               <i class="fa-solid fa-pen"></i>
-             </el-button>
-          </div>
-        </div>
-
-        <div v-show="sectionConfig.all.expanded">
-          <div v-if="visibleGeneralDevices.length === 0" class="empty-state">
-             <p v-if="visiblePinnedDevices.length > 0">All devices are in Custom section.</p>
-             <p v-else>No devices found.</p>
-          </div>
-          <draggable 
-            v-model="generalDevices" 
-            item-key="id" 
-            handle=".drag-handle"
-            ghost-class="ghost-card"
-            group="devices"
-            class="device-grid"
-            @end="saveOrder"
-          >
-          <template #item="{ element: device }">
-            <el-card 
-              class="device" 
-              :class="{ 'offline': device.data.online === false }"
-              v-show="!device.customHidden || showHiddenDevices"
-            >
-              <div class="card-badges">
-                <div v-if="getTemperature(device) && !isSensor(device)" class="temp-badge">
-                  <i class="fa-solid fa-temperature-half"></i>
-                  <span>{{ getTemperature(device) }}°C</span>
-                </div>
-                <div class="edit-btn" @click="openEditDialog(device)">
-                  <i class="fa-solid fa-gear"></i>
-                </div>
-                <div class="hide-btn" @click.stop="quickHide(device)" title="Hide device">
-                  <i class="fa-solid fa-eye-slash"></i>
-                </div>
-                <div class="drag-handle">
-                  <i class="fa-solid fa-grip-vertical"></i>
-                </div>
-              </div>
-              <div class="device-inner">
-                <el-tooltip effect="light" :content="device.type" :offset="[-10, 0]" :visible-arrow="false">
-                  <div class="device-icon-wrapper">
-                    <div v-if="isFontIcon(device.customIcon || device.type)" class="device-icon-font">
-                      <i :class="getIconClass(device.customIcon || device.type)"></i>
-                    </div>
-                    <el-avatar v-else :src="getIconUrl(device)" shape="circle" class="device-avatar">
-                      <img src="device_icons/default.png"/>
-                    </el-avatar>
-                    <div v-if="device.data.online" class="online-indicator"></div>
-                  </div>
-                </el-tooltip>
-                
-                <div class="device-info">
-                  <span class="device-name">{{ device.customName || device.name }}</span>
-                  <span class="device-status">{{ device.data.online ? (device.data.state ? 'Active' : 'Standby') : 'Offline' }}</span>
-                </div>
-
-                <div class="device-control">
-                  <template v-if="device.type === 'scene'">
-                    <el-button circle size="large" class="trigger-btn" @click="triggerScene(device);">
-                      <i class="fa-solid fa-play"></i>
-                    </el-button>
-                  </template>
-
-                  <template v-else-if="device.customUi === 'door_lock' || device.customUi === 'ac_mode'">
-                    <div class="custom-ui-grid" :class="device.customUi">
-                      <el-button 
-                        v-for="(btn, idx) in device.customButtons" 
-                        :key="idx"
-                        size="small" 
-                        class="custom-btn"
-                        @click="triggerCustomScene(btn.sceneId)"
-                        :disabled="!btn.sceneId"
-                      >
-                        <div class="btn-content">
-                          <i v-if="btn.icon" :class="btn.icon"></i>
-                          <span>{{ btn.label || `Btn ${idx+1}` }}</span>
-                        </div>
-                      </el-button>
-                    </div>
-                  </template>
-
-                  <template v-else-if="isSensor(device)">
-                    <div class="sensor-display">
-                      <span class="sensor-value">{{ getTemperature(device) }}</span>
-                      <span class="sensor-unit">°C</span>
-                    </div>
-                  </template>
-                  <template v-else>
-                    <el-button circle size="large"
-                      :class="['toggle-btn', device.data.state ? 'state-on' : 'state-off']"
-                      :disabled="!device.data.online"
-                      @click="toggleDevice(device);"
-                    >
-                      <i :class="['fa-solid', device.data.online ? 'fa-power-off' : 'fa-cloud-slash']"></i>
-                    </el-button>
-                  </template>
-                </div>
-              </div>
-            </el-card>
-          </template>
-        </draggable>
-      </div>
-      </div>
+      </el-tab-pane>
+    </el-tabs>
 
       <!-- Edit Dialog -->
       <el-dialog v-model="editDialogVisible" title="Customize Device" width="500px" border-radius="20px" custom-class="custom-dialog">
@@ -324,30 +176,24 @@
             </div>
           </el-form-item>
           
+          <el-form-item label="Card Size">
+            <el-radio-group v-model="editForm.size" size="small">
+              <el-radio-button label="full">Full Size</el-radio-button>
+              <el-radio-button label="half">Half Size</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+
+          <el-form-item label="UI Mode">
+            <el-radio-group v-model="editForm.uiMode" size="small">
+              <el-radio-button label="default">Default</el-radio-button>
+              <el-radio-button label="door_lock">Door Lock</el-radio-button>
+              <el-radio-button label="ac_unit">AC Unit</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          
           <el-form-item>
-             <el-checkbox v-model="editForm.customSection" label="Show in Custom Section" border></el-checkbox>
              <el-checkbox v-model="editForm.hidden" label="Hide device" border class="mt-2"></el-checkbox>
           </el-form-item>
-
-          <el-form-item v-if="editForm.isVirtual" label="Appearance Mode" class="mt-4">
-             <el-select v-model="editForm.customUi" placeholder="Select Mode" style="width: 100%" @change="handleModeChange">
-               <el-option label="Default" value="default" />
-               <el-option label="Door Lock (3 Buttons)" value="door_lock" />
-               <el-option label="Air Conditioner (5 Buttons)" value="ac_mode" />
-             </el-select>
-          </el-form-item>
-
-          <div v-if="editForm.isVirtual && editForm.customUi && editForm.customUi !== 'default'" class="door-lock-config mt-4">
-             <p class="config-title">Configure Buttons</p>
-             <div v-for="(btn, i) in editForm.customButtons" :key="i" class="button-config">
-               <span class="btn-label">Btn {{ i+1 }}</span>
-               <el-input v-model="btn.label" placeholder="Label" size="small" style="width: 80px"></el-input>
-               <el-input v-model="btn.icon" placeholder="Icon (fa-lock)" size="small" style="width: 100px"></el-input>
-               <el-select v-model="btn.sceneId" placeholder="Select Scene" size="small" style="flex: 1">
-                 <el-option v-for="s in availableScenes" :key="s.id" :label="s.name" :value="s.id" />
-               </el-select>
-             </div>
-          </div>
         </el-form>
         <template #footer>
           <div class="dialog-footer" :class="{ 'has-delete': editForm.isVirtual }">
@@ -365,27 +211,24 @@
   </div>
 </template>
 
-<script>
-export default {
-  name: 'Home'
-}
-</script>
 
-<script setup="" >
+
+<script setup>
 /* eslint-disable no-unused-vars */
-import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { ElMessage } from "element-plus"
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { ElMessage, ElMessageBox } from "element-plus"
 import draggable from 'vuedraggable'
-
 import tuya from '@/libs/tuya'
+import DeviceCard from '@/components/DeviceCard.vue'
 
 const homeAssistantClient = new tuya.HomeAssistantClient(
   JSON.parse(localStorage.getItem('session'))
 )
 
 const loginState = ref(false)
-const pinnedDevices = ref([])
-const generalDevices = ref([])
+const sections = ref([
+  { id: 'default', title: 'All Devices', expanded: true, editing: false, devices: [], hover: false }
+])
 
 const loginForm = ref({ username: '', password: '' })
 
@@ -398,38 +241,24 @@ const editForm = reactive({
   hidden: false,
   customSection: false,
   isVirtual: false,
-  customUi: 'default',
-  customButtons: []
+  size: 'full',
+  uiMode: 'default'
 })
 
-const sectionConfig = reactive({
-  custom: { title: 'Custom Cards', expanded: true, editing: false },
-  all: { title: 'All Devices', expanded: false, editing: false }
-})
-
-watch(sectionConfig, (newVal) => {
-  localStorage.setItem('dashboard_section_config', JSON.stringify(newVal))
-}, { deep: true })
-
-const showHiddenDevices = ref(false)
+const sectionRefs = reactive({})
+const activeTab = ref('dashboard')
 const currentTime = ref('')
 const currentDate = ref('')
 const weatherData = ref(null)
 
-const visiblePinnedDevices = computed(() => {
-  if (showHiddenDevices.value) return pinnedDevices.value
-  return pinnedDevices.value.filter(d => !d.customHidden)
+const allAvailableDevices = computed(() => {
+  const all = sections.value.flatMap(s => s.devices)
+  return all.filter(d => !d.isVirtual)
 })
 
-const visibleGeneralDevices = computed(() => {
-  if (showHiddenDevices.value) return generalDevices.value
-  return generalDevices.value.filter(d => !d.customHidden)
-})
-
-const availableScenes = computed(() => {
-  // Combine all known devices to find scenes
-  const all = [...pinnedDevices.value, ...generalDevices.value]
-  return all.filter(d => d.type === 'scene')
+const hiddenDevices = computed(() => {
+  const all = sections.value.flatMap(s => s.devices)
+  return all.filter(d => d.customHidden)
 })
 
 
@@ -442,25 +271,27 @@ const sortDevices = (list) => {
 }
 
 onMounted(async () => {
-  // TODO handle expired session
   loginState.value = !!homeAssistantClient.getSession()
   if (!loginState.value) {
     localStorage.clear()
   }
-  const savedDevices = JSON.parse(localStorage.getItem('devices')) || []
   
-  const savedSectionConfig = JSON.parse(localStorage.getItem('dashboard_section_config'))
-  if (savedSectionConfig) {
-    Object.assign(sectionConfig, savedSectionConfig)
-    // Reset editing state just in case
-    sectionConfig.custom.editing = false
-    sectionConfig.all.editing = false
+  const savedSections = JSON.parse(localStorage.getItem('dashboard_sections'))
+  if (savedSections) {
+    sections.value = savedSections.map(s => ({ ...s, editing: false, hover: false }))
+  } else {
+    // Legacy migration or fresh start
+    const savedDevices = JSON.parse(localStorage.getItem('devices')) || []
+    if (savedDevices.length > 0) {
+      const pinned = savedDevices.filter(d => d.customSection)
+      const general = savedDevices.filter(d => !d.customSection)
+      sections.value = [
+        { id: 'custom', title: 'Custom Cards', expanded: true, editing: false, devices: pinned, hover: false },
+        { id: 'default', title: 'All Devices', expanded: true, editing: false, devices: general, hover: false }
+      ]
+    }
   }
 
-  const pinned = savedDevices.filter(d => d.customSection)
-  const general = savedDevices.filter(d => !d.customSection)
-  pinnedDevices.value = pinned
-  generalDevices.value = general
   updateTime()
   setInterval(updateTime, 60000)
   fetchWeather()
@@ -486,7 +317,27 @@ const fetchWeather = async () => {
 const quickHide = (device) => {
   device.customHidden = true
   saveOrder()
-  ElMessage.success('Device hidden')
+  ElMessage.success('Device moved to Hidden tab')
+}
+
+const toggleHide = (device) => {
+  device.customHidden = !device.customHidden
+  saveOrder()
+}
+
+const handleDelete = (device) => {
+  if (device.isVirtual) {
+    editingDevice.value = device
+    deleteCustomCard()
+  } else {
+    if (confirm(`Remove ${device.customName || device.name} from dashboard?`)) {
+      sections.value.forEach(s => {
+        s.devices = s.devices.filter(d => d.id !== device.id)
+      })
+      saveOrder()
+      ElMessage.success('Removed from dashboard')
+    }
+  }
 }
 
 const getWeatherIcon = (code) => {
@@ -501,8 +352,7 @@ const getWeatherIcon = (code) => {
 }
 
 const saveOrder = () => {
-  const all = [...pinnedDevices.value, ...generalDevices.value]
-  localStorage.setItem('devices', JSON.stringify(all))
+  localStorage.setItem('dashboard_sections', JSON.stringify(sections.value))
 }
 
 const openEditDialog = (device) => {
@@ -511,83 +361,25 @@ const openEditDialog = (device) => {
   editForm.icon = device.customIcon || device.type
   editForm.hidden = device.customHidden || false
   editForm.customSection = device.customSection || false
-  editForm.hidden = device.customHidden || false
-  editForm.customSection = device.customSection || false
   editForm.isVirtual = device.isVirtual || false
+  editForm.size = device.size || 'full'
+  editForm.uiMode = device.uiMode || 'default'
   
-  editForm.customUi = device.customUi || 'default'
-  if (['door_lock', 'ac_mode'].includes(editForm.customUi)) {
-     editForm.customButtons = JSON.parse(JSON.stringify(device.customButtons || []))
-     // Ensure correct length just in case
-     const requiredLen = editForm.customUi === 'door_lock' ? 3 : 5
-     while (editForm.customButtons.length < requiredLen) editForm.customButtons.push({ label: '', sceneId: '', icon: '' })
-     editForm.customButtons = editForm.customButtons.slice(0, requiredLen)
-  } else {
-     editForm.customButtons = []
-  }
-
   editDialogVisible.value = true
 }
 
-const handleModeChange = (val) => {
-  if (val === 'default') {
-    editForm.customButtons = []
-  } else if (val === 'door_lock') {
-    updateButtonCount(3)
-  } else if (val === 'ac_mode') {
-    updateButtonCount(5)
-  }
-}
 
-const updateButtonCount = (count) => {
-  const current = editForm.customButtons
-  if (current.length < count) {
-    for (let i = current.length; i < count; i++) {
-        current.push({ label: '', sceneId: '', icon: '' })
-    }
-  } else if (current.length > count) {
-    editForm.customButtons = current.slice(0, count)
-  }
-}
 
 const saveCustomization = () => {
   if (editingDevice.value) {
     editingDevice.value.customName = editForm.name
     editingDevice.value.customIcon = editForm.icon
     editingDevice.value.customHidden = editForm.hidden
-    
-    editingDevice.value.customHidden = editForm.hidden
-    
-    // Save UI config
-    if (editForm.customUi !== 'default') {
-      editingDevice.value.customUi = editForm.customUi
-      editingDevice.value.customButtons = JSON.parse(JSON.stringify(editForm.customButtons))
-    } else {
-      editingDevice.value.customUi = undefined
-      editingDevice.value.customButtons = undefined
-    }
-
-    // Check if section changed
-    const oldSection = editingDevice.value.customSection || false
-    const newSection = editForm.customSection
-    
-    editingDevice.value.customSection = newSection
     editingDevice.value.isVirtual = editForm.isVirtual
+    editingDevice.value.size = editForm.size
+    editingDevice.value.uiMode = editForm.uiMode
     
-    if (oldSection !== newSection) {
-       // Move device
-       if (newSection) {
-         generalDevices.value = generalDevices.value.filter(d => d.id !== editingDevice.value.id)
-         pinnedDevices.value.push(editingDevice.value)
-       } else {
-         pinnedDevices.value = pinnedDevices.value.filter(d => d.id !== editingDevice.value.id)
-         generalDevices.value.push(editingDevice.value)
-       }
-    }
-
     saveOrder()
-    editDialogVisible.value = false
-    ElMessage.success('Changes saved!')
     editDialogVisible.value = false
     ElMessage.success('Changes saved!')
   }
@@ -596,88 +388,13 @@ const saveCustomization = () => {
 const deleteCustomCard = () => {
   if (!confirm('Are you sure you want to delete this custom card?')) return
   
-  // Remove from pinnedDevices
-  pinnedDevices.value = pinnedDevices.value.filter(d => d.id !== editingDevice.value.id)
-  // Just in case it somehow got to generalDevices
-  generalDevices.value = generalDevices.value.filter(d => d.id !== editingDevice.value.id)
+  sections.value.forEach(s => {
+    s.devices = s.devices.filter(d => d.id !== editingDevice.value.id)
+  })
   
   saveOrder()
   editDialogVisible.value = false
   ElMessage.success('Card deleted')
-}
-
-const isFontIcon = (icon) => {
-  if (!icon) return false
-  return !icon.includes('.') && !icon.includes('/') && !icon.startsWith('http')
-}
-
-const getIconClass = (icon) => {
-  if (!icon) return 'fa-solid fa-square-question'
-  
-  // If it's a full FA class string (e.g. "fa-brands fa-bluetooth"), use it as is
-  if (icon.includes('fa-')) return icon
-  
-  // Smart mappings for standard Tuya/SmartLife types and names
-  const mapping = {
-    'switch': 'fa-solid fa-power-off',
-    'scene': 'fa-solid fa-wand-magic-sparkles',
-    'lightbulb': 'fa-solid fa-lightbulb',
-    'outlet': 'fa-solid fa-plug',
-    'router': 'fa-solid fa-wifi',
-    'tv': 'fa-solid fa-tv',
-    'air': 'fa-solid fa-wind',
-    'ac_unit': 'fa-solid fa-snowflake',
-    'thermostat': 'fa-solid fa-temperature-half',
-    'door_front': 'fa-solid fa-door-open',
-    'videocam': 'fa-solid fa-video',
-    'sensor_window': 'fa-solid fa-window-restore',
-    'settings_remote': 'fa-solid fa-remote-control',
-    'wash': 'fa-solid fa-soap',
-    'coffee_maker': 'fa-solid fa-coffee-pot',
-    'curtains': 'fa-solid fa-scroll'
-  }
-  
-  return mapping[icon] || `fa-solid fa-${icon}`
-}
-
-const getIconUrl = (device) => {
-  const icon = device.customIcon || device.type
-  if (icon.startsWith('http')) return icon
-  return `device_icons/${icon}.png`
-}
-
-const getTemperature = (device) => {
-  if (!device || !device.data) return null
-  // Common Tuya/HomeAssistant fields for temperature
-  const temp = device.data.temperature || 
-               device.data.temp_current || 
-               device.data.cur_temp || 
-               device.data.current_temperature || 
-               device.data.temp
-  
-  if (temp === undefined || temp === null) return null
-  
-  // Tuya often sends temperature as an integer (e.g., 225 for 22.5) or float
-  // If it's very large, it might be multiplied by 10
-  if (temp > 100 && temp < 1000) {
-    return (temp / 10).toFixed(1)
-  }
-  
-  return typeof temp === 'number' ? temp.toFixed(1) : temp
-}
-
-const isSensor = (device) => {
-  if (!device) return false
-  const type = device.type
-  const sensorTypes = ['thermostat', 'sensor_temperature', 'humidity', 'sensor']
-  if (sensorTypes.includes(type)) return true
-
-  // Also treat as sensor if it has temperature data but NO boolean state (switch)
-  // This prevents hiding the power button for smart plugs that report temperature.
-  const hasTemp = getTemperature(device) !== null
-  const hasSwitch = typeof device.data.state === 'boolean'
-  
-  return hasTemp && !hasSwitch && type !== 'ac_unit' 
 }
 
 const login = async () => {
@@ -696,12 +413,28 @@ const login = async () => {
 }
 
 const logout = () => {
-  homeAssistantClient.dropSession()
-  localStorage.clear()
-  loginState.value = false
-  loginForm.value = { username: '', password: '' }
-  pinnedDevices.value = []
-  devices.value = []
+  ElMessageBox.confirm(
+    'Are you sure you want to log out?',
+    'Logout Confirmation',
+    {
+      confirmButtonText: 'Logout',
+      cancelButtonText: 'Cancel',
+      type: 'warning',
+      roundButton: true,
+      customClass: 'premium-confirm'
+    }
+  ).then(() => {
+    homeAssistantClient.dropSession()
+    localStorage.clear()
+    loginState.value = false
+    loginForm.value = { username: '', password: '' }
+    sections.value = [
+      { id: 'default', title: 'All Devices', expanded: true, editing: false, devices: [], hover: false }
+    ]
+    ElMessage.success('Logged out successfully')
+  }).catch(() => {
+    // User cancelled
+  })
 }
 
 const createVirtualDevice = () => {
@@ -710,78 +443,91 @@ const createVirtualDevice = () => {
     name: 'New Custom Card',
     type: 'virtual_card',
     isVirtual: true,
-    data: { online: true, state: false },
-    customSection: true, // Default to custom section
+    size: 'full',
+    uiMode: 'default',
+    data: { online: true, state: false, temperature: 24 },
+    customSection: true,
     customUi: 'default',
     customButtons: []
   }
-  pinnedDevices.value.push(newDevice)
+  // Add to the first section or default
+  const targetSection = sections.value[0] || { devices: [] }
+  targetSection.devices.push(newDevice)
   saveOrder()
   openEditDialog(newDevice)
 }
 
-// Refs require nextTick to focus
-const customTitleInput = ref(null)
-const allTitleInput = ref(null)
-
-import { nextTick } from 'vue'
-
-const startEditSection = (section) => {
-  sectionConfig[section].editing = true
+const addSection = () => {
+  const id = `section_${Date.now()}`
+  sections.value.push({
+    id,
+    title: 'New Section',
+    expanded: true,
+    editing: true,
+    devices: [],
+    hover: false
+  })
   nextTick(() => {
-    // Determine which ref to focus
-    // Note: in v-for or setup refs might be arrays or objects
-    // Since we used distinct refs:
-    if (section === 'custom' && customTitleInput.value) {
-       // El-input exposes input via ref? Check element-plus docs or try focus method
-       customTitleInput.value.focus()
-    } else if (section === 'all' && allTitleInput.value) {
-       allTitleInput.value.focus()
-    }
+    if (sectionRefs[id]) sectionRefs[id].focus()
   })
 }
 
+const editSection = (section) => {
+  section.editing = true
+  nextTick(() => {
+    if (sectionRefs[section.id]) sectionRefs[section.id].focus()
+  })
+}
+
+const deleteSection = (section) => {
+  if (section.id === 'default') return
+  if (confirm(`Are you sure you want to delete "${section.title}"? Devices will be moved to default section.`)) {
+    const defaultSection = sections.value.find(s => s.id === 'default')
+    if (defaultSection) {
+      defaultSection.devices.push(...section.devices)
+    }
+    sections.value = sections.value.filter(s => s.id !== section.id)
+    saveOrder()
+  }
+}
+
+// Section management methods already implemented above: addSection, editSection, deleteSection
+
 const refreshDevices = async () => {
-  // TODO handle expired session
   try {
     const discoveryResponse = await homeAssistantClient.deviceDiscovery()
     const newDevices = discoveryResponse.payload.devices || []
     
-    // Merge with existing customizations & order
-    const savedDevices = JSON.parse(localStorage.getItem('devices')) || []
-    const merged = []
+    // Flatten current devices to find existing ones
+    const currentDevices = sections.value.flatMap(s => s.devices)
     
-    // Keep existing ordered items that are still present, merging new data
-    savedDevices.forEach(oldD => {
-      if (oldD.isVirtual) {
-        merged.push(oldD)
-      } else {
-        const freshD = newDevices.find(d => d.id === oldD.id)
-        if (freshD) {
-          // Merge fresh data with custom fields
-          merged.push({
-            ...freshD,
-            customName: oldD.customName,
-            customIcon: oldD.customIcon,
-            customHidden: oldD.customHidden,
-            customSection: oldD.customSection,
-            customUi: oldD.customUi,
-            customButtons: oldD.customButtons
-          })
-        }
-      }
-    })
-    
-    // Add new items that weren't in the ordered list
+    // Add new devices to default section if they don't exist anywhere
     newDevices.forEach(freshD => {
-      if (!savedDevices.some(oldD => oldD.id === freshD.id)) {
-        merged.push(freshD)
+      const exists = currentDevices.some(d => d.id === freshD.id)
+      if (!exists) {
+        const defaultSection = sections.value.find(s => s.id === 'default') || sections.value[0]
+        defaultSection.devices.push({
+          ...freshD,
+          customName: '',
+          customIcon: freshD.type,
+          customHidden: false,
+          customSection: false,
+          customUi: 'default',
+          customButtons: []
+        })
+      } else {
+        // Sync fresh data for existing devices
+        sections.value.forEach(s => {
+          s.devices = s.devices.map(d => {
+            if (d.id === freshD.id) {
+              return { ...freshD, ...d, data: freshD.data } // Keep custom fields, update data/online
+            }
+            return d
+          })
+        })
       }
     })
     
-    const all = merged.length > 0 ? merged : sortDevices(newDevices)
-    pinnedDevices.value = all.filter(d => d.customSection)
-    generalDevices.value = all.filter(d => !d.customSection)
     saveOrder()
   } catch (err) {
     ElMessage.error(`Oops, device discovery error. (${err})`)
@@ -792,6 +538,10 @@ const toggleDevice = async (device) => {
   // TODO handle expired session
   // TODO change icon to el-icon-loading
   try {
+    if (device._tempAdjust !== undefined) {
+      await homeAssistantClient.deviceControl(device.id, 'setTemperature', device._tempAdjust)
+      return
+    }
     const newState = !device.data.state
     await homeAssistantClient.deviceControl(device.id, 'turnOnOff', newState)
     device.data.state = newState
@@ -817,6 +567,17 @@ const triggerCustomScene = async (sceneId) => {
     ElMessage.success('Scene triggered')
   } catch (err) {
     ElMessage.error(`Oops, scene error. (${err})`)
+  }
+}
+
+const findDeviceById = (id) => {
+  return sections.value.flatMap(s => s.devices).find(d => d.id === id)
+}
+
+const toggleGroupDevice = async (id) => {
+  const d = findDeviceById(id)
+  if (d) {
+    await toggleDevice(d)
   }
 }
 </script>
@@ -849,6 +610,16 @@ const triggerCustomScene = async (sceneId) => {
 
 .login-header {
   margin-bottom: 32px;
+  text-align: center;
+}
+
+.login-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  border-radius: 18px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.05);
 }
 
 .login-header h2 {
@@ -892,9 +663,15 @@ const triggerCustomScene = async (sceneId) => {
 .header-content {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: center; /* Ensure vertical alignment */
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 24px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .welcome-text h1 {
@@ -913,52 +690,189 @@ const triggerCustomScene = async (sceneId) => {
   font-size: 16px;
 }
 
-.header-actions {
+.btn-primary-sm, .btn-secondary-sm, .btn-logout-sm {
   display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn-primary-sm {
+  background: var(--primary-color) !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(136, 195, 169, 0.3);
+}
+
+.btn-secondary-sm {
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(8px);
+  color: var(--text-main) !important;
+  border: 1px solid rgba(0,0,0,0.05) !important;
+}
+
+.btn-primary-sm:hover, .btn-secondary-sm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+}
+
+.btn-logout-sm {
+  background: #fee2e2 !important;
+  color: #ef4444 !important;
+  width: 40px;
+  padding: 0;
+}
+
+.btn-logout-sm:hover {
+  background: #fecaca !important;
+  transform: scale(1.05);
+}
+
+/* Premium Weather Pill */
+.weather-pill {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 6px 20px;
+  border-radius: 24px;
+  gap: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.03);
+  margin-right: 8px;
+}
+
+.weather-brief {
+  border-right: 1px solid rgba(0, 0, 0, 0.05);
+  padding-right: 16px;
+  text-align: right;
+}
+
+.vibrant-time {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--text-main);
+  line-height: 1.1;
+}
+
+.vibrant-date {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vibrant-weather {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 
-.btn-secondary, .btn-logout {
+.weather-main {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  height: 44px;
-  border-radius: 14px;
-  font-weight: 500;
-  border: 1px solid rgba(0,0,0,0.05);
-  background: white !important;
-  color: var(--text-main) !important;
-  transition: all 0.2s ease;
+  gap: 6px;
 }
 
-.btn-secondary:hover, .btn-logout:hover {
-  background: #f8f9fa !important;
-  transform: translateY(-1px);
+.weather-main i {
+  font-size: 20px;
+  color: #f59e0b; /* Sunny yellow */
 }
 
-.btn-logout:hover {
-  color: #ef4444 !important;
+.vibrant-temp {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-main);
 }
 
-/* Device Grid */
-#devices {
-  /* Legacy ID, removed from usage */
+.weather-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.vibrant-humidity {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.vibrant-humidity i {
+  color: #3b82f6;
+}
+
+/* Tabs Styling */
+.dashboard-tabs :deep(.el-tabs__header) {
+  margin-bottom: 32px;
+  border: none;
+}
+
+.dashboard-tabs :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.dashboard-tabs :deep(.el-tabs__item) {
+  font-size: 16px;
+  font-weight: 700;
+  color: #94a3b8;
+  padding: 0 24px;
+  height: 48px;
+  line-height: 48px;
+  transition: all 0.3s;
+}
+
+.dashboard-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--primary-color);
+}
+
+.dashboard-tabs :deep(.el-tabs__active-bar) {
+  background-color: var(--primary-color);
+  height: 3px;
+  border-radius: 3px;
+}
+
+.tab-content {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .el-card.device {
   border: 1px solid rgba(255, 255, 255, 0.5);
   background: var(--card-bg);
   backdrop-filter: blur(12px);
-  border-radius: 28px;
+  border-radius: 20px;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   overflow: visible;
 }
 
 .device-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 28px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 16px;
+  align-items: start;
+}
+
+/* Base Device Layout overriden by specific sizes */
+:deep(.device) {
+  grid-column: span 2;
+}
+
+:deep(.device.size-half) {
+  grid-column: span 1;
 }
 
 .section-container {
@@ -975,285 +889,24 @@ const triggerCustomScene = async (sceneId) => {
   border-left: 4px solid var(--primary-color);
 }
 
-@media (max-width: 1200px) { .device-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 900px) { .device-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 600px) { .device-grid { grid-template-columns: repeat(1, 1fr); } }
-
-.el-card.device:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.04);
-  background: rgba(255, 255, 255, 0.9);
+@media (max-width: 900px) {
+  .device-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
 }
 
-.el-card.device.offline {
-  filter: opacity(0.6) grayscale(0.5);
-}
-
-.el-card.device :deep(.el-card__body) {
-  padding: 28px;
-  position: relative;
-}
-
-.card-badges {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
-  display: flex;
-  justify-content: space-between;
-  z-index: 10;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.device:hover .card-badges {
-  opacity: 1;
-}
-
-.edit-btn, .hide-btn, .drag-handle, .temp-badge {
-  cursor: pointer;
-  color: #cad4e0;
-  transition: color 0.2s;
+@media (max-width: 600px) { 
+  .device-grid { 
+    grid-template-columns: 1fr; 
+  }
+  :deep(.device), :deep(.device.size-half) {
+    grid-column: span 1;
+  }
 }
 
 
-.temp-badge {
-  cursor: default;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.5);
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-main);
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-}
 
-.temp-badge i {
-  font-size: 12px;
-  color: var(--accent-color);
-}
 
-.edit-btn:hover, .hide-btn:hover, .drag-handle:hover {
-  color: var(--text-muted);
-}
-
-.hide-btn:hover {
-  color: #ef4444;
-}
-
-.drag-handle {
-  cursor: grab;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
-.ghost-card {
-  opacity: 0.3;
-  background: var(--primary-color) !important;
-  border: 2px dashed var(--primary-color) !important;
-}
-
-.device-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-}
-
-.device-icon-wrapper {
-  position: relative;
-  margin-bottom: 4px;
-}
-
-.device-icon-font {
-  width: 72px;
-  height: 72px;
-  background: #f0f2f5;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  transition: all 0.3s ease;
-}
-
-.device-icon-font i {
-  font-size: 36px;
-  color: var(--text-main);
-}
-
-.device:hover .device-icon-font {
-  background: white;
-  transform: rotate(5deg);
-}
-
-.device-avatar {
-  width: 72px;
-  height: 72px;
-  background: #f0f2f5;
-  padding: 12px;
-  transition: all 0.3s ease;
-}
-
-.device:hover .device-avatar {
-  background: white;
-  transform: rotate(5deg);
-}
-
-.online-indicator {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 14px;
-  height: 14px;
-  background: var(--primary-color);
-  border: 3px solid white;
-  border-radius: 50%;
-  box-shadow: 0 0 10px rgba(136, 195, 169, 0.5);
-}
-
-.device-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.device-name {
-  font-weight: 700;
-  font-size: 17px;
-  color: var(--text-main);
-  word-break: break-word;
-}
-
-.device-status {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.device-control {
-  margin-top: 4px;
-}
-
-.weather-card {
-  background: white;
-  border-radius: 14px;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  border: 1px solid rgba(0,0,0,0.05);
-  margin-right: 8px;
-  height: 44px;
-}
-
-.weather-info {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.date-time {
-  text-align: right;
-  line-height: 1.2;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.time {
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--text-main);
-}
-
-.date {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.weather-detail {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--primary-color);
-  padding-left: 12px;
-  border-left: 1px solid #f0f0f0;
-  height: 24px;
-}
-
-.weather-values {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
-  align-items: flex-start;
-  gap: 2px;
-}
-
-.humidity {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.humidity {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.door-lock-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-}
-
-.lock-btn {
-  margin: 0 !important;
-  width: 100%;
-  border-radius: 8px;
-}
-
-.door-lock-config {
-  background: #f8f9fa;
-  padding: 12px;
-  border-radius: 12px;
-}
-
-.config-title {
-  margin: 0 0 8px 0;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.button-config {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.btn-label {
-  font-size: 12px;
-  width: 40px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.button-config .el-input {
-  flex-shrink: 0;
-}
 
 
 /* Edit Dialog Styles */
@@ -1294,38 +947,89 @@ const triggerCustomScene = async (sceneId) => {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
-  padding: 8px 4px;
-  border-radius: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
   margin-bottom: 8px;
   user-select: none;
+  background: rgba(0,0,0,0.02);
+  transition: all 0.2s;
 }
+
 .section-header:hover {
-  background-color: rgba(0,0,0,0.03);
+  background: rgba(0,0,0,0.04);
 }
+
 .header-left {
   display: flex;
   align-items: center;
   gap: 12px;
   flex: 1;
 }
+
 .section-arrow {
   transition: transform 0.2s;
   font-size: 12px;
   color: var(--text-muted);
 }
+
 .section-arrow.expanded {
   transform: rotate(90deg);
 }
+
 .header-actions-sm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   opacity: 0;
   transition: opacity 0.2s;
 }
+
 .section-header:hover .header-actions-sm {
   opacity: 1;
 }
+
+.section-drag-handle {
+  cursor: grab;
+  color: #94a3b8;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.section-drag-handle:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--text-main);
+}
+
+.section-drag-handle:active {
+  cursor: grabbing;
+}
+
+.ghost-section {
+  opacity: 0.5;
+  background: #f1f5f9;
+  border-radius: 20px;
+}
+
+.sections-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 .title-edit {
   flex: 1;
-  max-width: 200px;
+  max-width: 250px;
+}
+
+.empty-state {
+  padding: 40px;
+  text-align: center;
+  color: #94a3b8;
+  background: rgba(0,0,0,0.01);
+  border-radius: 20px;
+  border: 2px dashed rgba(0,0,0,0.05);
+  margin: 12px 0;
 }
 
 .fa-link {
@@ -1349,132 +1053,4 @@ const triggerCustomScene = async (sceneId) => {
   padding: 10px 24px;
 }
 
-/* Buttons */
-.toggle-btn, .trigger-btn {
-  width: 56px;
-  height: 56px;
-  border: none !important;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
-
-.toggle-btn.state-on {
-  background: var(--primary-color) !important;
-  color: white !important;
-  box-shadow: 0 8px 20px rgba(136, 195, 169, 0.4) !important;
-}
-
-.toggle-btn.state-off {
-  background: #f0f2f5 !important;
-  color: #94a3b8 !important;
-}
-
-.trigger-btn {
-  background: var(--accent-color) !important;
-  color: white !important;
-  box-shadow: 0 8px 20px rgba(243, 182, 100, 0.4) !important;
-}
-
-.toggle-btn:hover:not(:disabled), .trigger-btn:hover {
-  transform: scale(1.1);
-}
-
-.toggle-btn i, .trigger-btn i {
-  font-size: 28px;
-}
-
-.sensor-display {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: white;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-  border: 1px solid rgba(0,0,0,0.05);
-}
-
-.sensor-value {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text-main);
-  line-height: 1;
-}
-
-.sensor-unit {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-.custom-ui-grid {
-  display: grid;
-  gap: 6px;
-  width: 100%;
-}
-
-.custom-ui-grid.door_lock {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.custom-ui-grid.ac_mode {
-  grid-template-columns: 1fr 1fr;
-}
-/* Make the last item in AC mode span full width if odd number */
-.custom-ui-grid.ac_mode .custom-btn:last-child:nth-child(odd) {
-  grid-column: span 2;
-}
-
-.custom-btn {
-  margin: 0 !important;
-  width: 100%;
-  border-radius: 8px;
-  height: auto !important;
-  padding: 8px !important;
-}
-
-.custom-btn .btn-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  line-height: 1.2;
-  width: 100%;
-}
-
-.custom-btn i {
-  font-size: 20px;
-  margin-bottom: 2px;
-}
-
-
-.door-lock-config {
-  background: #f8f9fa;
-  padding: 12px;
-  border-radius: 12px;
-}
-
-.config-title {
-  margin: 0 0 8px 0;
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.button-config {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.btn-label {
-  font-size: 12px;
-  width: 40px;
-  color: var(--text-muted);
-}
 </style>
