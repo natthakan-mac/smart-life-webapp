@@ -1,45 +1,133 @@
 <template>
-  <div id="nav">
-    <el-form v-if="!loginState" :model="loginForm" :inline="true">
-      <el-form-item label="Email address" size="medium">
-        <el-input v-model="loginForm.username"></el-input>
-      </el-form-item>
-      <el-form-item label="Password">
-        <el-input type="password" v-model="loginForm.password"></el-input>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="login()">Login</el-button>
-      </el-form-item>
-    </el-form>
-    <template v-else>
-      <el-button type="default" @click="refreshDevices()">Refresh</el-button>
-      <el-button type="default" @click="logout()">Logout</el-button>
-    </template>
-  </div>
-  <div id="devices">
-    <div v-for="device in devicesSorted" :key="device.id">
-      <el-card class="device" :style="device.data.online === false ? 'filter: opacity(0.65) grayscale(1);' : ''">
-        <el-tooltip effect="light" :content="device.type" :offset="-20"
-          :visible-arrow="false">
-          <el-avatar :src="`device_icons/${device.type}.png`" shape="square">
-            <img src="device_icons/default.png"/>
-          </el-avatar>
-        </el-tooltip>
-        <span class="device-name">{{ device.name }}</span>
-        <template v-if="device.type === 'scene'">
-          <el-button type="default" circle size="large"
-            class="trigger"
-            @click="triggerScene(device);"
-          ><i class="material-icons-round">play_arrow</i></el-button>
-        </template>
-        <template v-else>
-          <el-button type="default" circle size="large"
-            :class="device.data.state ? 'state-on' : 'state-off'"
-            :disabled="!device.data.online"
-            @click="toggleDevice(device);"
-          ><i class="material-icons-round">{{ device.data.online ? 'power_settings_new' : 'cloud_off' }}</i></el-button>
-        </template>
+  <div class="page-container">
+    <div v-if="!loginState" class="login-wrapper">
+      <el-card class="login-card">
+        <div class="login-header">
+          <h2>Welcome Home</h2>
+          <p>Please sign in to control your devices.</p>
+        </div>
+        <el-form :model="loginForm" label-position="top">
+          <el-form-item label="Email address">
+            <el-input v-model="loginForm.username" placeholder="your@email.com"></el-input>
+          </el-form-item>
+          <el-form-item label="Password">
+            <el-input type="password" v-model="loginForm.password" placeholder="••••••••" show-password></el-input>
+          </el-form-item>
+          <div class="login-actions">
+            <el-button type="primary" class="btn-login" @click="login()">Login</el-button>
+          </div>
+        </el-form>
       </el-card>
+    </div>
+
+    <div v-else class="dashboard-wrapper">
+      <header class="dashboard-header">
+        <div class="header-content">
+          <div class="welcome-text">
+            <h1>Your Devices</h1>
+            <p>{{ devices.length }} devices connected</p>
+          </div>
+          <div class="header-actions">
+            <el-button class="btn-secondary" @click="refreshDevices()">
+              <i class="fa-solid fa-rotate"></i>
+              <span>Refresh</span>
+            </el-button>
+            <el-button class="btn-logout" @click="logout()">
+              <i class="fa-solid fa-right-from-bracket"></i>
+              <span>Logout</span>
+            </el-button>
+          </div>
+        </div>
+      </header>
+
+      <draggable 
+        v-model="devices" 
+        item-key="id" 
+        handle=".drag-handle"
+        ghost-class="ghost-card"
+        id="devices"
+        @end="saveOrder"
+      >
+        <template #item="{ element: device }">
+          <el-card class="device" :class="{ 'offline': device.data.online === false }">
+            <div class="card-badges">
+              <div class="edit-btn" @click="openEditDialog(device)">
+                <i class="fa-solid fa-gear"></i>
+              </div>
+              <div class="drag-handle">
+                <i class="fa-solid fa-grip-vertical"></i>
+              </div>
+            </div>
+            <div class="device-inner">
+              <el-tooltip effect="light" :content="device.type" :offset="[-10, 0]" :visible-arrow="false">
+                <div class="device-icon-wrapper">
+                  <div v-if="isFontIcon(device.customIcon || device.type)" class="device-icon-font">
+                    <i :class="getIconClass(device.customIcon || device.type)"></i>
+                  </div>
+                  <el-avatar v-else :src="getIconUrl(device)" shape="circle" class="device-avatar">
+                    <img src="device_icons/default.png"/>
+                  </el-avatar>
+                  <div v-if="device.data.online" class="online-indicator"></div>
+                </div>
+              </el-tooltip>
+              
+              <div class="device-info">
+                <span class="device-name">{{ device.customName || device.name }}</span>
+                <span class="device-status">{{ device.data.online ? (device.data.state ? 'Active' : 'Standby') : 'Offline' }}</span>
+              </div>
+
+              <div class="device-control">
+                <template v-if="device.type === 'scene'">
+                  <el-button circle size="large" class="trigger-btn" @click="triggerScene(device);">
+                    <i class="fa-solid fa-play"></i>
+                  </el-button>
+                </template>
+                <template v-else>
+                  <el-button circle size="large"
+                    :class="['toggle-btn', device.data.state ? 'state-on' : 'state-off']"
+                    :disabled="!device.data.online"
+                    @click="toggleDevice(device);"
+                  >
+                    <i :class="['fa-solid', device.data.online ? 'fa-power-off' : 'fa-cloud-slash']"></i>
+                  </el-button>
+                </template>
+              </div>
+            </div>
+          </el-card>
+        </template>
+      </draggable>
+
+      <!-- Edit Dialog -->
+      <el-dialog v-model="editDialogVisible" title="Customize Device" width="400px" border-radius="20px" custom-class="custom-dialog">
+        <el-form label-position="top">
+          <el-form-item label="Display Name">
+            <el-input v-model="editForm.name" placeholder="e.g. Living Room Lamp"></el-input>
+          </el-form-item>
+          <el-form-item label="Icon">
+            <div class="icon-picker">
+              <div v-for="icon in commonIcons" :key="icon" 
+                   class="icon-option" 
+                   :class="{ active: editForm.icon === icon }"
+                   @click="editForm.icon = icon">
+                <i :class="getIconClass(icon)"></i>
+              </div>
+            </div>
+            <el-input v-model="editForm.icon" placeholder="e.g. lightbulb, fa-brands fa-apple, or URL" class="mt-12"></el-input>
+            <div class="icon-help">
+              <p>Tip: Use <code>fa-brands</code> for brand icons or <code>fa-regular</code> for outlined icons.</p>
+              <a href="https://fontawesome.com/search?o=r&m=free" target="_blank" class="fa-link">
+                Browse Font Awesome Free <i class="fa-solid fa-up-right-from-square"></i>
+              </a>
+            </div>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="editDialogVisible = false">Cancel</el-button>
+            <el-button type="primary" @click="saveCustomization" class="btn-save">Save Changes</el-button>
+          </div>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -52,8 +140,9 @@ export default {
 
 <script setup="" >
 /* eslint-disable no-unused-vars */
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage } from "element-plus"
+import draggable from 'vuedraggable'
 
 import tuya from '@/libs/tuya'
 
@@ -64,14 +153,38 @@ const homeAssistantClient = new tuya.HomeAssistantClient(
 const loginState = ref(false)
 const devices = ref([])
 
-const devicesSorted = computed(() => {
-  const order = { true: 0, undefined: 1, false: 2 }
-  return devices.value.slice().sort((d1, d2) =>
-    order[d1.data.online] > order[d2.data.online] ? 1 : -1
-  )
+const loginForm = ref({ username: '', password: '' })
+
+// Edit State
+const editDialogVisible = ref(false)
+const editingDevice = ref(null)
+const editForm = reactive({
+  name: '',
+  icon: ''
 })
 
-const loginForm = ref({ username: '', password: '' })
+const commonIcons = [
+  // Core
+  'lightbulb', 'plug', 'power-off', 'wand-magic-sparkles', 'bolt',
+  // Climate
+  'wind', 'snowflake', 'temperature-half', 'droplet',
+  // Security/Safety
+  'video', 'door-open', 'lock', 'shield-halved', 'bell',
+  // Multimedia
+  'tv', 'music', 'gamepad', 'speaker',
+  // Kitchen/House
+  'kitchen', 'soap', 'coffee-pot', 'scroll', 'bed',
+  // Brands
+  'fa-brands fa-apple', 'fa-brands fa-google', 'fa-brands fa-bluetooth', 'fa-brands fa-amazon'
+]
+
+// Initial sort by online status, but only if no manual order exists
+const sortDevices = (list) => {
+  const order = { true: 0, undefined: 1, false: 2 }
+  return list.slice().sort((d1, d2) =>
+    order[d1.data.online] > order[d2.data.online] ? 1 : -1
+  )
+}
 
 onMounted(async () => {
   // TODO handle expired session
@@ -79,8 +192,70 @@ onMounted(async () => {
   if (!loginState.value) {
     localStorage.clear()
   }
-  devices.value = JSON.parse(localStorage.getItem('devices')) || []
+  const savedDevices = JSON.parse(localStorage.getItem('devices')) || []
+  devices.value = savedDevices
 })
+
+const saveOrder = () => {
+  localStorage.setItem('devices', JSON.stringify(devices.value))
+}
+
+const openEditDialog = (device) => {
+  editingDevice.value = device
+  editForm.name = device.customName || device.name
+  editForm.icon = device.customIcon || device.type
+  editDialogVisible.value = true
+}
+
+const saveCustomization = () => {
+  if (editingDevice.value) {
+    editingDevice.value.customName = editForm.name
+    editingDevice.value.customIcon = editForm.icon
+    saveOrder()
+    editDialogVisible.value = false
+    ElMessage.success('Changes saved!')
+  }
+}
+
+const isFontIcon = (icon) => {
+  if (!icon) return false
+  return !icon.includes('.') && !icon.includes('/') && !icon.startsWith('http')
+}
+
+const getIconClass = (icon) => {
+  if (!icon) return 'fa-solid fa-square-question'
+  
+  // If it's a full FA class string (e.g. "fa-brands fa-bluetooth"), use it as is
+  if (icon.includes('fa-')) return icon
+  
+  // Smart mappings for standard Tuya/SmartLife types and names
+  const mapping = {
+    'switch': 'fa-solid fa-power-off',
+    'scene': 'fa-solid fa-wand-magic-sparkles',
+    'lightbulb': 'fa-solid fa-lightbulb',
+    'outlet': 'fa-solid fa-plug',
+    'router': 'fa-solid fa-wifi',
+    'tv': 'fa-solid fa-tv',
+    'air': 'fa-solid fa-wind',
+    'ac_unit': 'fa-solid fa-snowflake',
+    'thermostat': 'fa-solid fa-temperature-half',
+    'door_front': 'fa-solid fa-door-open',
+    'videocam': 'fa-solid fa-video',
+    'sensor_window': 'fa-solid fa-window-restore',
+    'settings_remote': 'fa-solid fa-remote-control',
+    'wash': 'fa-solid fa-soap',
+    'coffee_maker': 'fa-solid fa-coffee-pot',
+    'curtains': 'fa-solid fa-scroll'
+  }
+  
+  return mapping[icon] || `fa-solid fa-${icon}`
+}
+
+const getIconUrl = (device) => {
+  const icon = device.customIcon || device.type
+  if (icon.startsWith('http')) return icon
+  return `device_icons/${icon}.png`
+}
 
 const login = async () => {
   try {
@@ -109,9 +284,34 @@ const refreshDevices = async () => {
   // TODO handle expired session
   try {
     const discoveryResponse = await homeAssistantClient.deviceDiscovery()
-    const discoveryDevices = discoveryResponse.payload.devices || []
-    devices.value = discoveryDevices
-    localStorage.setItem('devices', JSON.stringify(discoveryDevices))
+    const newDevices = discoveryResponse.payload.devices || []
+    
+    // Merge with existing customizations & order
+    const savedDevices = JSON.parse(localStorage.getItem('devices')) || []
+    const merged = []
+    
+    // Keep existing ordered items that are still present, merging new data
+    savedDevices.forEach(oldD => {
+      const freshD = newDevices.find(d => d.id === oldD.id)
+      if (freshD) {
+        // Merge fresh data with custom fields
+        merged.push({
+          ...freshD,
+          customName: oldD.customName,
+          customIcon: oldD.customIcon
+        })
+      }
+    })
+    
+    // Add new items that weren't in the ordered list
+    newDevices.forEach(freshD => {
+      if (!savedDevices.some(oldD => oldD.id === freshD.id)) {
+        merged.push(freshD)
+      }
+    })
+    
+    devices.value = merged.length > 0 ? merged : sortDevices(newDevices)
+    saveOrder()
   } catch (err) {
     ElMessage.error(`Oops, device discovery error. (${err})`)
   }
@@ -141,87 +341,382 @@ const triggerScene = async (device) => {
 </script>
 
 <style scoped>
-#nav {
+.page-container {
+  padding: 40px 20px;
+  max-width: 1400px;
   margin: 0 auto;
-  margin-top: 64px;
-  margin-bottom: 64px;
 }
 
+/* Login Card Styles */
+.login-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 70vh;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: var(--card-bg);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+}
+
+.login-header {
+  margin-bottom: 32px;
+}
+
+.login-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-main);
+}
+
+.login-header p {
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.login-actions {
+  margin-top: 24px;
+}
+
+.btn-login {
+  width: 100%;
+  height: 50px;
+  font-size: 16px;
+  font-weight: 600;
+  background-color: var(--primary-color) !important;
+  border: none;
+  border-radius: 16px;
+  transition: all 0.3s ease;
+}
+
+.btn-login:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 15px rgba(136, 195, 169, 0.3);
+}
+
+/* Dashboard Header */
+.dashboard-header {
+  margin-bottom: 60px;
+  text-align: left;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.welcome-text h1 {
+  font-size: 36px;
+  font-weight: 800;
+  margin: 0 0 4px 0;
+  background: linear-gradient(135deg, var(--text-main), #88929b);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.welcome-text p {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: 16px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-secondary, .btn-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  height: 44px;
+  border-radius: 14px;
+  font-weight: 500;
+  border: 1px solid rgba(0,0,0,0.05);
+  background: white !important;
+  color: var(--text-main) !important;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover, .btn-logout:hover {
+  background: #f8f9fa !important;
+  transform: translateY(-1px);
+}
+
+.btn-logout:hover {
+  color: #ef4444 !important;
+}
+
+/* Device Grid */
 #devices {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
-  padding: 0 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+  gap: 28px;
 }
 
-@media (max-width: 1100px) {
-  #devices {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 850px) {
-  #devices {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 550px) {
-  #devices {
-    grid-template-columns: repeat(1, 1fr);
-  }
-}
+@media (max-width: 1200px) { #devices { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 900px) { #devices { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { #devices { grid-template-columns: repeat(1, 1fr); } }
 
 .el-card.device {
-  margin-bottom: 0px;
-  transition: transform 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  border-radius: 28px;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  overflow: visible;
 }
 
 .el-card.device:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.el-card.device.offline {
+  filter: opacity(0.6) grayscale(0.5);
 }
 
 .el-card.device :deep(.el-card__body) {
+  padding: 28px;
+  position: relative;
+}
+
+.card-badges {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.device:hover .card-badges {
+  opacity: 1;
+}
+
+.edit-btn, .drag-handle {
+  cursor: pointer;
+  color: #cad4e0;
+  transition: color 0.2s;
+}
+
+.edit-btn:hover, .drag-handle:hover {
+  color: var(--text-muted);
+}
+
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.ghost-card {
+  opacity: 0.3;
+  background: var(--primary-color) !important;
+  border: 2px dashed var(--primary-color) !important;
+}
+
+.device-inner {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 24px;
+  gap: 20px;
+}
+
+.device-icon-wrapper {
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.device-icon-font {
+  width: 72px;
+  height: 72px;
+  background: #f0f2f5;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.device-icon-font i {
+  font-size: 36px;
+  color: var(--text-main);
+}
+
+.device:hover .device-icon-font {
+  background: white;
+  transform: rotate(5deg);
+}
+
+.device-avatar {
+  width: 72px;
+  height: 72px;
+  background: #f0f2f5;
+  padding: 12px;
+  transition: all 0.3s ease;
+}
+
+.device:hover .device-avatar {
+  background: white;
+  transform: rotate(5deg);
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--primary-color);
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(136, 195, 169, 0.5);
+}
+
+.device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .device-name {
-  font-weight: 600;
-  font-size: 16px;
-  text-align: center;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--text-main);
   word-break: break-word;
 }
 
-.el-button.state-on:enabled {
-  color: #f9f9f9;
-  background-color: #7dd8ba;
-}
-.el-button.state-off:enabled {
-  color: #a3a4a7;
-  background-color: #f9f9f9;
-}
-.el-button.trigger:enabled {
-  color: #f9f9f9;
-  background-color: #9eabce;
-}
-.el-button.el-button--large {
-  padding: 12px;
-  font-size: 24px;
-  line-height: 0px;
+.device-status {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
+.device-control {
+  margin-top: 4px;
+}
 
-.el-avatar {
-  background: transparent;
-  margin-right: 0;
-  width: 64px;
-  height: 64px;
+/* Edit Dialog Styles */
+.custom-dialog :deep(.el-dialog) {
+  border-radius: 24px;
+  padding: 10px;
+}
+
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.icon-option {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 48px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f8f9fa;
+  color: var(--text-muted);
+}
+
+.icon-option:hover {
+  background: #f0f2f5;
+  color: var(--text-main);
+}
+
+.icon-option.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.icon-help {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.icon-help p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 4px 0;
+}
+
+.fa-link {
+  font-size: 13px;
+  color: var(--primary-color) !important;
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fa-link:hover {
+  text-decoration: underline;
+}
+
+.mt-12 { margin-top: 12px; }
+
+.btn-save {
+  border-radius: 12px;
+  padding: 10px 24px;
+}
+
+/* Buttons */
+.toggle-btn, .trigger-btn {
+  width: 56px;
+  height: 56px;
+  border: none !important;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.toggle-btn.state-on {
+  background: var(--primary-color) !important;
+  color: white !important;
+  box-shadow: 0 8px 20px rgba(136, 195, 169, 0.4) !important;
+}
+
+.toggle-btn.state-off {
+  background: #f0f2f5 !important;
+  color: #94a3b8 !important;
+}
+
+.trigger-btn {
+  background: var(--accent-color) !important;
+  color: white !important;
+  box-shadow: 0 8px 20px rgba(243, 182, 100, 0.4) !important;
+}
+
+.toggle-btn:hover:not(:disabled), .trigger-btn:hover {
+  transform: scale(1.1);
+}
+
+.toggle-btn i, .trigger-btn i {
+  font-size: 28px;
 }
 </style>
