@@ -147,18 +147,56 @@ const triggerScene = async (device) => {
   margin-bottom: 64px;
 }
 
-.el-card.device {
-  max-width: 800px;
+#devices {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  padding: 0 24px;
+  max-width: 1200px;
   margin: 0 auto;
-  margin-bottom: 16px;
 }
+
+@media (max-width: 1100px) {
+  #devices {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 850px) {
+  #devices {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 550px) {
+  #devices {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+
+.el-card.device {
+  margin-bottom: 0px;
+  transition: transform 0.2s;
+}
+
+.el-card.device:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
 .el-card.device :deep(.el-card__body) {
   display: flex;
-  justify-content: flex-start;
+  flex-direction: column;
   align-items: center;
+  gap: 16px;
+  padding: 24px;
 }
-.el-card.device :deep(.el-card__body :last-child) {
-  margin-left: auto;
+
+.device-name {
+  font-weight: 600;
+  font-size: 16px;
+  text-align: center;
+  word-break: break-word;
 }
 
 .el-button.state-on:enabled {
@@ -174,14 +212,16 @@ const triggerScene = async (device) => {
   background-color: #9eabce;
 }
 .el-button.el-button--large {
-  padding: 9px;
-  font-size: 20px;
+  padding: 12px;
+  font-size: 24px;
   line-height: 0px;
 }
 
 
 .el-avatar {
   background: transparent;
-  margin-right: 16px;
+  margin-right: 0;
+  width: 64px;
+  height: 64px;
 }
 </style>
