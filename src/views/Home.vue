@@ -51,6 +51,10 @@
         <template #item="{ element: device }">
           <el-card class="device" :class="{ 'offline': device.data.online === false }">
             <div class="card-badges">
+              <div v-if="getTemperature(device)" class="temp-badge">
+                <i class="fa-solid fa-temperature-half"></i>
+                <span>{{ getTemperature(device) }}°C</span>
+              </div>
               <div class="edit-btn" @click="openEditDialog(device)">
                 <i class="fa-solid fa-gear"></i>
               </div>
@@ -104,15 +108,7 @@
             <el-input v-model="editForm.name" placeholder="e.g. Living Room Lamp"></el-input>
           </el-form-item>
           <el-form-item label="Icon">
-            <div class="icon-picker">
-              <div v-for="icon in commonIcons" :key="icon" 
-                   class="icon-option" 
-                   :class="{ active: editForm.icon === icon }"
-                   @click="editForm.icon = icon">
-                <i :class="getIconClass(icon)"></i>
-              </div>
-            </div>
-            <el-input v-model="editForm.icon" placeholder="e.g. lightbulb, fa-brands fa-apple, or URL" class="mt-12"></el-input>
+            <el-input v-model="editForm.icon" placeholder="e.g. lightbulb, fa-brands fa-apple, or URL"></el-input>
             <div class="icon-help">
               <p>Tip: Use <code>fa-brands</code> for brand icons or <code>fa-regular</code> for outlined icons.</p>
               <a href="https://fontawesome.com/search?o=r&m=free" target="_blank" class="fa-link">
@@ -163,20 +159,6 @@ const editForm = reactive({
   icon: ''
 })
 
-const commonIcons = [
-  // Core
-  'lightbulb', 'plug', 'power-off', 'wand-magic-sparkles', 'bolt',
-  // Climate
-  'wind', 'snowflake', 'temperature-half', 'droplet',
-  // Security/Safety
-  'video', 'door-open', 'lock', 'shield-halved', 'bell',
-  // Multimedia
-  'tv', 'music', 'gamepad', 'speaker',
-  // Kitchen/House
-  'kitchen', 'soap', 'coffee-pot', 'scroll', 'bed',
-  // Brands
-  'fa-brands fa-apple', 'fa-brands fa-google', 'fa-brands fa-bluetooth', 'fa-brands fa-amazon'
-]
 
 // Initial sort by online status, but only if no manual order exists
 const sortDevices = (list) => {
@@ -255,6 +237,26 @@ const getIconUrl = (device) => {
   const icon = device.customIcon || device.type
   if (icon.startsWith('http')) return icon
   return `device_icons/${icon}.png`
+}
+
+const getTemperature = (device) => {
+  if (!device || !device.data) return null
+  // Common Tuya/HomeAssistant fields for temperature
+  const temp = device.data.temperature || 
+               device.data.temp_current || 
+               device.data.cur_temp || 
+               device.data.current_temperature || 
+               device.data.temp
+  
+  if (temp === undefined || temp === null) return null
+  
+  // Tuya often sends temperature as an integer (e.g., 225 for 22.5) or float
+  // If it's very large, it might be multiplied by 10
+  if (temp > 100 && temp < 1000) {
+    return (temp / 10).toFixed(1)
+  }
+  
+  return typeof temp === 'number' ? temp.toFixed(1) : temp
 }
 
 const login = async () => {
@@ -511,10 +513,30 @@ const triggerScene = async (device) => {
   opacity: 1;
 }
 
-.edit-btn, .drag-handle {
+.edit-btn, .drag-handle, .temp-badge {
   cursor: pointer;
   color: #cad4e0;
   transition: color 0.2s;
+}
+
+.temp-badge {
+  cursor: default;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.temp-badge i {
+  font-size: 12px;
+  color: var(--accent-color);
 }
 
 .edit-btn:hover, .drag-handle:hover {
@@ -622,37 +644,6 @@ const triggerScene = async (device) => {
   padding: 10px;
 }
 
-.icon-picker {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
-  margin-bottom: 16px;
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 4px;
-}
-
-.icon-option {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 48px;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: #f8f9fa;
-  color: var(--text-muted);
-}
-
-.icon-option:hover {
-  background: #f0f2f5;
-  color: var(--text-main);
-}
-
-.icon-option.active {
-  background: var(--primary-color);
-  color: white;
-}
 
 .icon-help {
   margin-top: 12px;
